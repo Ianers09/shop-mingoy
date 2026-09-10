@@ -1,0 +1,18 @@
+# Spring Boot
+backend/target/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# VS Code
+.vscode/
+
+# IntelliJ
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
