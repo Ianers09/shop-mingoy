@@ -78,6 +78,14 @@ function App() {
     loadInitialData();
   }, []);
 
+  const getCartQuantity = (productId) => {
+    const item = cart.find(
+      (cartItem) => cartItem.productId === productId
+    );
+
+    return item ? item.quantity : 0;
+  };
+
   const addToCart = (productId) => {
     const product = inventory.find(
       (item) => item.productId === productId
@@ -165,6 +173,15 @@ function App() {
             }
           : item
       )
+    );
+  };
+
+  const changeCartQuantity = (productId, amount) => {
+    const currentQuantity = getCartQuantity(productId);
+
+    updateCartQuantity(
+      productId,
+      currentQuantity + amount
     );
   };
 
@@ -323,11 +340,11 @@ function App() {
     return (
       <div className="app">
         <div className="container">
-          <h1>Shop Order System</h1>
-          <p className="subtitle">
-            Modular Monolith Integration Lab
-          </p>
-          <p>Loading shop data...</p>
+          <div className="loading-screen">
+            <div className="loading-spinner"></div>
+            <h1>Shop Order System</h1>
+            <p>Loading shop data...</p>
+          </div>
         </div>
       </div>
     );
@@ -336,12 +353,27 @@ function App() {
   return (
     <div className="app">
       <div className="container">
+
         <header className="page-header">
           <div>
+            <div className="brand-mark">SHOP</div>
             <h1>Shop Order System</h1>
             <p className="subtitle">
               Modular Monolith Integration Lab
             </p>
+          </div>
+
+          <div className="header-cart">
+            <span className="header-cart-label">
+              Cart
+            </span>
+
+            <span className="header-cart-count">
+              {cart.reduce(
+                (total, item) => total + item.quantity,
+                0
+              )}
+            </span>
           </div>
         </header>
 
@@ -351,10 +383,14 @@ function App() {
               result.success ? "success" : "error"
             }`}
           >
+            <div className="result-icon">
+              {result.success ? "✓" : "!"}
+            </div>
+
             <div className="result-content">
               <h2>
                 {result.success
-                  ? "Success"
+                  ? "Order Successful"
                   : "Request Rejected"}
               </h2>
 
@@ -370,9 +406,10 @@ function App() {
                       className="result-item"
                     >
                       <span>
-                        {item.productId}
+                        {item.productId} × {item.quantity}
                       </span>
-                      <span>
+
+                      <span className="result-outcome">
                         {item.outcome}
                       </span>
                     </div>
@@ -385,8 +422,9 @@ function App() {
               type="button"
               className="close-result"
               onClick={() => setResult(null)}
+              aria-label="Close result"
             >
-              Close
+              ×
             </button>
           </div>
         )}
@@ -394,74 +432,139 @@ function App() {
         <section className="section">
           <div className="section-header">
             <div>
-              <h2>Inventory</h2>
-              <p>
-                Current product stock
-              </p>
+              <span className="section-number">01</span>
+              <div>
+                <h2>Inventory</h2>
+                <p>
+                  Select products and adjust quantities.
+                </p>
+              </div>
             </div>
           </div>
 
           <div className="inventory-grid">
-            {inventory.map((product) => (
-              <div
-                key={product.productId}
-                className={`inventory-card ${
-                  product.stock < LOW_STOCK_THRESHOLD
-                    ? "low-stock"
-                    : ""
-                }`}
-              >
-                <div>
-                  <span className="product-id">
-                    {product.productId}
-                  </span>
+            {inventory.map((product) => {
+              const cartQuantity =
+                getCartQuantity(product.productId);
 
-                  <h3>{product.name}</h3>
-                </div>
+              const isLowStock =
+                product.stock < LOW_STOCK_THRESHOLD;
 
-                <div className="inventory-card-bottom">
-                  <div>
-                    <span className="stock-label">
-                      Stock
+              return (
+                <div
+                  key={product.productId}
+                  className={`inventory-card ${
+                    isLowStock ? "low-stock" : ""
+                  }`}
+                >
+                  <div className="inventory-card-top">
+                    <span className="product-id">
+                      {product.productId}
                     </span>
 
-                    <strong>{product.stock}</strong>
+                    {isLowStock && (
+                      <span className="stock-status">
+                        Low Stock
+                      </span>
+                    )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addToCart(product.productId)
-                    }
-                    disabled={product.stock <= 0}
-                  >
-                    {product.stock <= 0
-                      ? "Out of Stock"
-                      : "Add to Cart"}
-                  </button>
+                  <h3>{product.name}</h3>
+
+                  <div className="inventory-details">
+                    <div>
+                      <span className="stock-label">
+                        Available
+                      </span>
+
+                      <strong
+                        className={
+                          product.stock === 0
+                            ? "out-stock"
+                            : ""
+                        }
+                      >
+                        {product.stock}
+                      </strong>
+                    </div>
+
+                    <div className="selected-count">
+                      <span className="stock-label">
+                        In Cart
+                      </span>
+
+                      <strong>{cartQuantity}</strong>
+                    </div>
+                  </div>
+
+                  <div className="quantity-control">
+                    <button
+                      type="button"
+                      className="quantity-button"
+                      onClick={() =>
+                        changeCartQuantity(
+                          product.productId,
+                          -1
+                        )
+                      }
+                      disabled={cartQuantity === 0}
+                      aria-label={`Decrease ${product.name}`}
+                    >
+                      −
+                    </button>
+
+                    <span className="quantity-value">
+                      {cartQuantity}
+                    </span>
+
+                    <button
+                      type="button"
+                      className="quantity-button"
+                      onClick={() =>
+                        addToCart(product.productId)
+                      }
+                      disabled={
+                        product.stock <= 0 ||
+                        cartQuantity >= product.stock
+                      }
+                      aria-label={`Increase ${product.name}`}
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {product.stock <= 0 ? (
+                    <div className="out-of-stock-label">
+                      Out of Stock
+                    </div>
+                  ) : (
+                    <div className="availability-label">
+                      {product.stock} unit
+                      {product.stock === 1 ? "" : "s"} available
+                    </div>
+                  )}
+
+                  {isLowStock && (
+                    <div className="low-stock-warning">
+                      Low stock — reorder needed
+                    </div>
+                  )}
                 </div>
-
-                {product.stock < LOW_STOCK_THRESHOLD && (
-                  <div className="low-stock-warning">
-                    Low stock — reorder needed
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
         <section className="section">
           <div className="section-header">
             <div>
-              <h2>Cart</h2>
-              <p>
-                {cart.length === 0
-                  ? "No products added."
-                  : `${cart.length} product${
-                      cart.length === 1 ? "" : "s"
-                    } in cart.`}
-              </p>
+              <span className="section-number">02</span>
+              <div>
+                <h2>Your Cart</h2>
+                <p>
+                  Review your items before placing the order.
+                </p>
+              </div>
             </div>
 
             {cart.length > 0 && (
@@ -477,7 +580,15 @@ function App() {
 
           {cart.length === 0 ? (
             <div className="empty-state">
-              Add products from the inventory above.
+              <div className="empty-state-icon">
+                +
+              </div>
+
+              <strong>Your cart is empty</strong>
+
+              <span>
+                Add products from the inventory above.
+              </span>
             </div>
           ) : (
             <form
@@ -507,21 +618,49 @@ function App() {
                         </span>
 
                         <strong>{item.name}</strong>
+
+                        <span className="cart-availability">
+                          {maxStock} available
+                        </span>
                       </div>
 
                       <div className="cart-item-actions">
-                        <input
-                          type="number"
-                          min="1"
-                          max={maxStock}
-                          value={item.quantity}
-                          onChange={(e) =>
-                            updateCartQuantity(
-                              item.productId,
-                              e.target.value
-                            )
-                          }
-                        />
+                        <div className="quantity-control cart-quantity">
+                          <button
+                            type="button"
+                            className="quantity-button"
+                            onClick={() =>
+                              changeCartQuantity(
+                                item.productId,
+                                -1
+                              )
+                            }
+                            aria-label={`Decrease ${item.name}`}
+                          >
+                            −
+                          </button>
+
+                          <span className="quantity-value">
+                            {item.quantity}
+                          </span>
+
+                          <button
+                            type="button"
+                            className="quantity-button"
+                            onClick={() =>
+                              changeCartQuantity(
+                                item.productId,
+                                1
+                              )
+                            }
+                            disabled={
+                              item.quantity >= maxStock
+                            }
+                            aria-label={`Increase ${item.name}`}
+                          >
+                            +
+                          </button>
+                        </div>
 
                         <button
                           type="button"
@@ -540,15 +679,28 @@ function App() {
                 })}
               </div>
 
-              <button
-                type="submit"
-                className="place-order-button"
-                disabled={loading}
-              >
-                {loading
-                  ? "Processing..."
-                  : "Place Order"}
-              </button>
+              <div className="cart-footer">
+                <div>
+                  <span>Total Items</span>
+                  <strong>
+                    {cart.reduce(
+                      (total, item) =>
+                        total + item.quantity,
+                      0
+                    )}
+                  </strong>
+                </div>
+
+                <button
+                  type="submit"
+                  className="place-order-button"
+                  disabled={loading}
+                >
+                  {loading
+                    ? "Processing..."
+                    : "Place Order"}
+                </button>
+              </div>
             </form>
           )}
         </section>
@@ -556,16 +708,22 @@ function App() {
         <section className="section">
           <div className="section-header">
             <div>
-              <h2>Order History</h2>
-              <p>
-                Previous orders and their current status
-              </p>
+              <span className="section-number">03</span>
+              <div>
+                <h2>Order History</h2>
+                <p>
+                  Previous orders and their current status.
+                </p>
+              </div>
             </div>
           </div>
 
           {orders.length === 0 ? (
             <div className="empty-state">
-              No orders yet.
+              <strong>No orders yet</strong>
+              <span>
+                Your submitted orders will appear here.
+              </span>
             </div>
           ) : (
             <div className="orders-list">
@@ -602,7 +760,7 @@ function App() {
                           key={`${order.orderId}-${item.productId}-${index}`}
                         >
                           <span>
-                            {item.productId} -{" "}
+                            {item.productId} —{" "}
                             {getProductName(
                               item.productId
                             )}
@@ -644,17 +802,23 @@ function App() {
         <section className="section">
           <div className="section-header">
             <div>
-              <h2>Notifications</h2>
-              <p>
-                Domain events received by the Notification
-                module
-              </p>
+              <span className="section-number">04</span>
+              <div>
+                <h2>Notifications</h2>
+                <p>
+                  Events received by the Notification
+                  module.
+                </p>
+              </div>
             </div>
           </div>
 
           {notifications.length === 0 ? (
             <div className="empty-state">
-              No notifications yet.
+              <strong>No notifications yet</strong>
+              <span>
+                Order and inventory events will appear here.
+              </span>
             </div>
           ) : (
             <div className="notifications-list">
@@ -663,6 +827,8 @@ function App() {
                   className="notification-card"
                   key={notification.notificationId}
                 >
+                  <div className="notification-dot"></div>
+
                   <div>
                     <strong>
                       {notification.message}
@@ -679,6 +845,12 @@ function App() {
             </div>
           )}
         </section>
+
+        <footer className="page-footer">
+          <span>SHOP ORDER SYSTEM</span>
+          <span>Spring Boot + React + Supabase</span>
+        </footer>
+
       </div>
     </div>
   );
