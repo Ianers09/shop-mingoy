@@ -1,13 +1,18 @@
 package edu.cit.mingoy.shop;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "orders")
@@ -18,26 +23,27 @@ public class Order {
     @Column(name = "order_id")
     private Long orderId;
 
-    @Column(name = "product_id", nullable = false)
-    private String productId;
-
-    @Column(nullable = false)
-    private Integer quantity;
-
     @Column(nullable = false)
     private String status;
 
+    @Column(nullable = false)
     private String reason;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @OneToMany(
+            mappedBy = "order",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
+            fetch = FetchType.LAZY
+    )
+    private List<OrderItem> items = new ArrayList<>();
+
     public Order() {
     }
 
-    public Order(String productId, Integer quantity, String status, String reason) {
-        this.productId = productId;
-        this.quantity = quantity;
+    public Order(String status, String reason) {
         this.status = status;
         this.reason = reason;
         this.createdAt = LocalDateTime.now();
@@ -49,22 +55,6 @@ public class Order {
 
     public void setOrderId(Long orderId) {
         this.orderId = orderId;
-    }
-
-    public String getProductId() {
-        return productId;
-    }
-
-    public void setProductId(String productId) {
-        this.productId = productId;
-    }
-
-    public Integer getQuantity() {
-        return quantity;
-    }
-
-    public void setQuantity(Integer quantity) {
-        this.quantity = quantity;
     }
 
     public String getStatus() {
@@ -89,5 +79,23 @@ public class Order {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public List<OrderItem> getItems() {
+        return items;
+    }
+
+    public void setItems(List<OrderItem> items) {
+        this.items = items;
+    }
+
+    public void addItem(OrderItem item) {
+        items.add(item);
+        item.setOrder(this);
+    }
+
+    public void removeItem(OrderItem item) {
+        items.remove(item);
+        item.setOrder(null);
     }
 }
