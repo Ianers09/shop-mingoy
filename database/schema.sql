@@ -1,6 +1,11 @@
+DROP TABLE IF EXISTS supplier_orders;
+
 DROP TABLE IF EXISTS notifications;
+
 DROP TABLE IF EXISTS order_items;
+
 DROP TABLE IF EXISTS orders;
+
 DROP TABLE IF EXISTS inventory;
 
 CREATE TABLE inventory (
@@ -27,6 +32,19 @@ CREATE TABLE notifications (
     notification_id BIGSERIAL PRIMARY KEY,
     message VARCHAR(500) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE supplier_orders (
+    id BIGSERIAL PRIMARY KEY,
+    product_id VARCHAR(50) NOT NULL,
+    buyer_ref VARCHAR(40) NOT NULL UNIQUE,
+    request_id VARCHAR(80) NOT NULL UNIQUE,
+    po_number VARCHAR(100),
+    cases INTEGER NOT NULL,
+    units INTEGER NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 INSERT INTO inventory (product_id, name, stock)
