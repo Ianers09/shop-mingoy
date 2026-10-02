@@ -1,5 +1,6 @@
 package edu.cit.mingoy.supplier;
 
+import edu.cit.mingoy.channel.InstanceIdentity;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -43,17 +44,20 @@ class LegacySupplyClient {
     private final String baseUrl;
     private final String clientId;
     private final String apiKey;
+    private final InstanceIdentity instanceIdentity;
 
     private String sessionToken;
 
     LegacySupplyClient(
             @Value("${LS_BASE_URL:https://legacysupply.onrender.com/api/v1}") String baseUrl,
             @Value("${LS_CLIENT_ID}") String clientId,
-            @Value("${LS_API_KEY}") String apiKey
+            @Value("${LS_API_KEY}") String apiKey,
+            InstanceIdentity instanceIdentity
     ) {
         this.baseUrl = baseUrl;
         this.clientId = clientId;
         this.apiKey = apiKey;
+        this.instanceIdentity = instanceIdentity;
 
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(3))
@@ -242,6 +246,7 @@ class LegacySupplyClient {
                     .header("Content-Type", "application/xml")
                     .header("X-LS-Session", sessionToken)
                     .header("X-Request-Id", requestId)
+                    .header("X-Client-Instance", instanceIdentity.getInstanceId())
                     .POST(HttpRequest.BodyPublishers.ofString(xml))
                     .build();
 
@@ -307,6 +312,7 @@ class LegacySupplyClient {
                     .timeout(Duration.ofSeconds(3))
                     .header("Accept", "application/xml")
                     .header("X-LS-Session", sessionToken)
+                    .header("X-Client-Instance", instanceIdentity.getInstanceId())
                     .GET()
                     .build();
 
@@ -374,6 +380,7 @@ class LegacySupplyClient {
                 .uri(URI.create(baseUrl + "/auth/token"))
                 .timeout(Duration.ofSeconds(3))
                 .header("Content-Type", "application/xml")
+                .header("X-Client-Instance", instanceIdentity.getInstanceId())
                 .POST(HttpRequest.BodyPublishers.ofString(xml))
                 .build();
 

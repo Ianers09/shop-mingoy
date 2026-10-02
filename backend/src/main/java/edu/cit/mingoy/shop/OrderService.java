@@ -29,294 +29,162 @@ public class OrderService {
     }
 
     @Transactional
-    public Order createOrder(
-            List<OrderController.OrderItemRequest> requestItems
-    ) {
-
-        /*
-         * STEP 1:
-         * Validate that the order contains items.
-         */
+    public Order createOrder(List<OrderController.OrderItemRequest> requestItems) {
         if (requestItems == null || requestItems.isEmpty()) {
-
-            Order order = new Order(
-                    "REJECTED",
-                    "Order must contain at least one item"
-            );
-
-            Order saved = orderRepository.save(order);
-
-            eventPublisher.publishEvent(
-                    new OrderRejected(
-                            saved.getOrderId(),
-                            saved.getReason()
-                    )
-            );
-
-            return saved;
+            return saveRejected("Order must contain at least one item", List.of());
         }
 
-        /*
-         * STEP 2:
-         * Validate EVERY item BEFORE reserving ANY inventory.
-         *
-         * This is important for atomicity.
-         * If one item fails validation, nothing is reserved.
-         */
         List<String> validationErrors = new ArrayList<>();
-
         for (OrderController.OrderItemRequest requestItem : requestItems) {
-
             if (requestItem == null) {
                 validationErrors.add("Invalid order item");
                 continue;
             }
-
-            if (requestItem.productId() == null
-                    || requestItem.productId().isBlank()) {
-
-                validationErrors.add(
-                        "Product ID must not be empty"
-                );
-
+            if (requestItem.productId() == null || requestItem.productId().isBlank()) {
+                validationErrors.add("Product ID must not be empty");
                 continue;
             }
-
             if (requestItem.quantity() <= 0) {
-
-                validationErrors.add(
-                        requestItem.productId()
-                                + ": Quantity must be greater than zero"
-                );
-
+                validationErrors.add(requestItem.productId() + ": Quantity must be greater than zero");
                 continue;
             }
-
-            InventoryItem inventoryItem =
-                    inventoryService.getItem(
-                            requestItem.productId()
-                    );
-
+            InventoryItem inventoryItem = inventoryService.getItem(requestItem.productId());
             if (inventoryItem == null) {
-
-                validationErrors.add(
-                        requestItem.productId()
-                                + ": Product not found"
-                );
-
+                validationErrors.add(requestItem.productId() + ": Product not found");
                 continue;
             }
-
-            if (inventoryItem.getStock()
-                    < requestItem.quantity()) {
-
-                validationErrors.add(
-                        requestItem.productId()
-                                + ": Insufficient stock"
-                );
+            if (inventoryItem.getStock() < requestItem.quantity()) {
+                validationErrors.add(requestItem.productId() + ": Insufficient stock");
             }
         }
 
-        /*
-         * STEP 3:
-         * If ANY item failed validation,
-         * reject the ENTIRE order.
-         *
-         * No inventory reservation has happened yet.
-         */
         if (!validationErrors.isEmpty()) {
-
-            String reason =
-                    String.join("; ", validationErrors);
-
-            Order order = new Order(
-                    "REJECTED",
-                    reason
+            return saveRejected(
+                    String.join("; ", validationErrors),
+                    requestItems
             );
-
-            for (OrderController.OrderItemRequest requestItem
-                    : requestItems) {
-
-                if (requestItem == null) {
-                    continue;
-                }
-
-                if (requestItem.productId() == null
-                        || requestItem.productId().isBlank()) {
-                    continue;
-                }
-
-                if (requestItem.quantity() <= 0) {
-                    continue;
-                }
-
-                order.addItem(
-                        new OrderItem(
-                                requestItem.productId(),
-                                requestItem.quantity()
-                        )
-                );
-            }
-
-            Order saved = orderRepository.save(order);
-
-            eventPublisher.publishEvent(
-                    new OrderRejected(
-                            saved.getOrderId(),
-                            saved.getReason()
-                    )
-            );
-
-            return saved;
         }
 
-        /*
-         * STEP 4:
-         * All items passed validation.
-         *
-         * We can now reserve every item.
-         */
-        Order order = new Order(
-                "CONFIRMED",
-                "Order confirmed"
-        );
-
-        for (OrderController.OrderItemRequest requestItem
-                : requestItems) {
-
-            InventoryItem reserved =
-                    inventoryService.reserve(
-                            requestItem.productId(),
-                            requestItem.quantity()
-                    );
-
-            /*
-             * If inventory unexpectedly changed between validation
-             * and reservation, throw an exception.
-             *
-             * Because this method is @Transactional, previous
-             * inventory changes in this transaction are rolled back.
-             */
+        Order order = new Order("CONFIRMED", "Order confirmed");
+        for (OrderController.OrderItemRequest requestItem : requestItems) {
+            InventoryItem reserved = inventoryService.reserve(
+                    requestItem.productId(),
+                    requestItem.quantity()
+            );
             if (reserved == null) {
-
                 throw new IllegalStateException(
-                        "Unable to reserve inventory for "
-                                + requestItem.productId()
+                        "Unable to reserve inventory for " + requestItem.productId()
                 );
             }
-
-            order.addItem(
-                    new OrderItem(
-                            requestItem.productId(),
-                            requestItem.quantity()
-                    )
-            );
+            order.addItem(new OrderItem(requestItem.productId(), requestItem.quantity()));
         }
 
-        /*
-         * STEP 5:
-         * Save the confirmed order and publish the event.
-         */
-        Order saved =
-                orderRepository.save(order);
+        Order saved = orderRepository.save(order);
+        eventPublisher.publishEvent(new OrderPlaced(saved.getOrderId()));
+        return saved;
+    }
 
-        eventPublisher.publishEvent(
-                new OrderPlaced(
-                        saved.getOrderId()
-                )
-        );
+    @Transactional
+    public Order createBackorderedOrder(
+            List<OrderController.OrderItemRequest> requestItems,
+            String reason
+    ) {
+        Order order = new Order("BACKORDERED", reason);
+        for (OrderController.OrderItemRequest requestItem : requestItems) {
+            order.addItem(new OrderItem(requestItem.productId(), requestItem.quantity()));
+        }
+        return orderRepository.save(order);
+    }
 
+    @Transactional
+    public Order fulfillBackorderedOrder(Long orderId) {
+        Order order = orderRepository.findById(orderId).orElse(null);
+        if (order == null || !"BACKORDERED".equals(order.getStatus())) {
+            return null;
+        }
+
+        for (OrderItem item : order.getItems()) {
+            InventoryItem inventoryItem = inventoryService.getItem(item.getProductId());
+            if (inventoryItem == null || inventoryItem.getStock() < item.getQuantity()) {
+                return null;
+            }
+        }
+
+        for (OrderItem item : order.getItems()) {
+            if (inventoryService.reserve(item.getProductId(), item.getQuantity()) == null) {
+                throw new IllegalStateException(
+                        "Unable to reserve inventory for " + item.getProductId()
+                );
+            }
+        }
+
+        order.setStatus("CONFIRMED");
+        order.setReason("Backorder fulfilled");
+        Order saved = orderRepository.save(order);
+        eventPublisher.publishEvent(new OrderPlaced(saved.getOrderId()));
         return saved;
     }
 
     @Transactional
     public Order cancelOrder(Long orderId) {
-
-        Order order =
-                orderRepository.findById(orderId)
-                        .orElse(null);
-
-        /*
-         * Controller converts null into HTTP 404.
-         */
+        Order order = orderRepository.findById(orderId).orElse(null);
         if (order == null) {
             return null;
         }
-
-        /*
-         * Controller converts this exception into HTTP 409.
-         */
         if ("CANCELLED".equals(order.getStatus())) {
-
-            throw new IllegalStateException(
-                    "Order is already CANCELLED"
-            );
+            throw new IllegalStateException("Order is already CANCELLED");
         }
-
-        /*
-         * Restock every line item that was reserved.
-         */
-        for (OrderItem item : order.getItems()) {
-
-            InventoryItem restocked =
-                    inventoryService.restock(
-                            item.getProductId(),
-                            item.getQuantity()
-                    );
-
-            if (restocked == null) {
-
-                throw new IllegalStateException(
-                        "Unable to restock "
-                                + item.getProductId()
+        if ("CONFIRMED".equals(order.getStatus())) {
+            for (OrderItem item : order.getItems()) {
+                InventoryItem restocked = inventoryService.restock(
+                        item.getProductId(),
+                        item.getQuantity()
                 );
+                if (restocked == null) {
+                    throw new IllegalStateException(
+                            "Unable to restock " + item.getProductId()
+                    );
+                }
             }
         }
-
         order.setStatus("CANCELLED");
-
-        order.setReason(
-                "Order cancelled and inventory restocked"
-        );
-
+        order.setReason("Order cancelled and inventory restocked");
         return orderRepository.save(order);
     }
 
     @Transactional(readOnly = true)
     public List<OrderController.OrderHistory> getOrderHistory() {
-
-        List<Order> orders =
-                orderRepository.findAll();
-
-        List<OrderController.OrderHistory> history =
-                new ArrayList<>();
-
+        List<Order> orders = orderRepository.findAll();
+        List<OrderController.OrderHistory> history = new ArrayList<>();
         for (Order order : orders) {
-
-            List<OrderController.OrderHistoryItem> items =
-                    new ArrayList<>();
-
+            List<OrderController.OrderHistoryItem> items = new ArrayList<>();
             for (OrderItem item : order.getItems()) {
-
-                items.add(
-                        new OrderController.OrderHistoryItem(
-                                item.getProductId(),
-                                item.getQuantity()
-                        )
-                );
+                items.add(new OrderController.OrderHistoryItem(item.getProductId(), item.getQuantity()));
             }
-
-            history.add(
-                    new OrderController.OrderHistory(
-                            order.getOrderId(),
-                            order.getStatus(),
-                            order.getReason(),
-                            order.getCreatedAt().toString(),
-                            items
-                    )
-            );
+            history.add(new OrderController.OrderHistory(
+                    order.getOrderId(),
+                    order.getStatus(),
+                    order.getReason(),
+                    order.getCreatedAt().toString(),
+                    items
+            ));
         }
-
         return history;
+    }
+
+    private Order saveRejected(
+            String reason,
+            List<OrderController.OrderItemRequest> requestItems
+    ) {
+        Order order = new Order("REJECTED", reason);
+        for (OrderController.OrderItemRequest requestItem : requestItems) {
+            if (requestItem == null || requestItem.productId() == null || requestItem.productId().isBlank() || requestItem.quantity() <= 0) {
+                continue;
+            }
+            order.addItem(new OrderItem(requestItem.productId(), requestItem.quantity()));
+        }
+        Order saved = orderRepository.save(order);
+        eventPublisher.publishEvent(new OrderRejected(saved.getOrderId(), saved.getReason()));
+        return saved;
     }
 }

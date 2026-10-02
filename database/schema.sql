@@ -1,3 +1,7 @@
+DROP TABLE IF EXISTS tiangge_orders;
+DROP TABLE IF EXISTS tiangge_events;
+DROP TABLE IF EXISTS tiangge_state;
+
 DROP TABLE IF EXISTS supplier_orders;
 
 DROP TABLE IF EXISTS notifications;
@@ -52,3 +56,27 @@ VALUES
     ('P100', 'Wireless Mouse', 60),
     ('P200', 'Mechanical Keyboard', 60),
     ('P300', 'USB-C Hub', 50);
+
+CREATE TABLE tiangge_state (
+    id INTEGER PRIMARY KEY,
+    cursor BIGINT NOT NULL
+);
+
+CREATE TABLE tiangge_events (
+    id BIGSERIAL PRIMARY KEY,
+    event_id VARCHAR(100) NOT NULL UNIQUE,
+    seq BIGINT NOT NULL,
+    type VARCHAR(40) NOT NULL
+);
+
+CREATE TABLE tiangge_orders (
+    id BIGSERIAL PRIMARY KEY,
+    order_id VARCHAR(80) NOT NULL UNIQUE,
+    event_id VARCHAR(100) NOT NULL,
+    local_order_id BIGINT,
+    shop_order_id VARCHAR(80),
+    status VARCHAR(40) NOT NULL,
+    lines_json TEXT NOT NULL
+);
+
+INSERT INTO tiangge_state (id, cursor) VALUES (1, 0);

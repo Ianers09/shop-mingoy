@@ -1,5 +1,6 @@
 package edu.cit.mingoy.supplier;
 
+import edu.cit.mingoy.supplier.events.SupplierOrderCancelled;
 import edu.cit.mingoy.supplier.events.SupplierOrderDelivered;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -72,6 +73,17 @@ class SupplierTrackingScheduler {
                     )
             );
         }
+
+        if (newStatus == SupplierOrderStatus.CANCELLED &&
+                previousStatus != SupplierOrderStatus.CANCELLED) {
+
+            eventPublisher.publishEvent(
+                    new SupplierOrderCancelled(
+                            order.getProductId(),
+                            order.getPoNumber()
+                    )
+            );
+        }
     }
 
     private SupplierOrderStatus mapStatusCode(
@@ -86,6 +98,7 @@ class SupplierTrackingScheduler {
             case "20" -> SupplierOrderStatus.PICKING;
             case "30" -> SupplierOrderStatus.SHIPPED;
             case "40" -> SupplierOrderStatus.DELIVERED;
+            case "90" -> SupplierOrderStatus.CANCELLED;
             default -> SupplierOrderStatus.UNKNOWN;
         };
     }

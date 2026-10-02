@@ -43,3 +43,17 @@ Order and Inventory would not need to know whether the external supplier uses XM
 The replacement adapter would translate the new supplier's API into the application's existing SupplierOrderResult and SupplierOrderStatus types.
 
 This demonstrates the purpose of the anti-corruption layer: external supplier-specific details remain isolated from the application's own domain modules.
+
+# Lab 4 Reflection
+
+## 1. How does the Tiangge feed remain safe across restarts and duplicate delivery?
+
+The application stores the Tiangge feed cursor in the database and stores every processed event ID with its sequence number and type. After a restart, the application resumes from the stored cursor instead of starting from the beginning. Before processing an event, it checks whether the event ID has already been stored. This prevents the same event from being handled twice when Tiangge delivers it again.
+
+## 2. How does the application handle Tiangge orders when stock is available or unavailable?
+
+When all requested items are available, the application creates a local confirmed order, reserves the inventory, sends an ACCEPTED decision to Tiangge, and publishes the resulting stock. When the requested stock is not available, the application creates supplier replenishment orders for the missing units, records the local order as BACKORDERED, and sends a BACKORDERED decision to Tiangge. After the supplier delivery is received and the local inventory has enough stock, the backorder is fulfilled and Tiangge is resolved as ACCEPTED.
+
+## 3. How are customer cancellations handled?
+
+When an ORDER_CANCELLED event is received for an accepted Tiangge order, the application cancels the corresponding local order and restocks its reserved items. It then confirms the cancellation to Tiangge with restocked set to true and publishes the updated stock.
